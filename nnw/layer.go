@@ -1,144 +1,107 @@
 package nnw
 
-import (
-	"fmt"
-	"math"
-)
-
 type Layer struct {
-	Size   int
-	Type   string
-	Neural []float64
+	size int
+	neurons []*Neuron
+	prev, next *Layer
 }
 
-func Sigmoid(x float64) float64 {
-	fmt.Printf("before sigmoid: %v", x)
-	y := 1.0 / (1.0 + math.Exp(-x))
-	fmt.Printf(", after sigmoid: %v\n", y)
-	return y
-}
-
-func SigmoidDerivative(y float64) float64 {
-	return y * (1 - y)
-}
-
-func LeRU(x float64) float64 {
-	return math.Max(0, x)
-}
-
-func LeRUDerivative(y float64) float64 {
-	if y >= 0 {
-		return 1
-	} else {
-		return 0
+func NewLayer(inSize, s int, at string) *Layer {
+	var l = new(Layer)
+	l.size = s
+	l.prev = nil
+	l.next = nil
+	l.neurons = make([]*Neuron, l.size)
+	for i := range l.neurons {
+		l.neurons[i] = NewNeuron(inSize, at)
 	}
-}
-
-func NewLayer(s int, t string) *Layer {
-	var layer = new(Layer)
-	layer.Size = s
-	layer.Type = t
-	layer.Neural = make([]float64, layer.Size)
-	return layer
-}
-
-func (l *Layer) LeftProduct(w [][]float64) []float64 {
-	result := make([]float64, len(w))
-	for i := range w {
-		for j := range w[i] {
-			result[i] += w[i][j] * l.Neural[j]
-		}
-	}
-	return result
-}
-
-func (l *Layer) RightProduct(w [][]float64) []float64 {
-	var result = make([]float64, len(w[0]))
-	for i := range w {
-		for j := range w[i] {
-			result[j] += l.Neural[i] * w[i][j]
-		}
-	}
-	return result
-}
-
-func (l *Layer) Activate() []float64 {
-	var result = make([]float64, l.Size)
-	switch l.Type {
-	case "Sigmoid":
-		for i := range l.Neural {
-			result[i] = Sigmoid(l.Neural[i])
-		}
-	case "ReLU":
-		for i := range l.Neural {
-			result[i] = LeRU(l.Neural[i])
-		}
-	default:
-		copy(result, l.Neural)
-	}
-	return result
-}
-
-func (l *Layer) DeActivate(funcName string) []float64 {
-	var result = make([]float64, l.Size)
-	switch funcName {
-	case "Sigmoid":
-		for i := range l.Neural {
-			result[i] = SigmoidDerivative(l.Neural[i])
-		}
-	case "ReLU":
-		for i := range l.Neural {
-			result[i] = LeRUDerivative(l.Neural[i])
-		}
-	default:
-		copy(result, l.Neural)
-	}
-	return result
+	return l
 }
 
 func (l *Layer) Input(in []float64) {
-	copy(l.Neural, in)
+	for _, n := range l.neurons {
+		n.SetInput(in)
+	}
 }
 
 func (l *Layer) Output() []float64 {
-	out := make([]float64, l.Size)
-	copy(out, l.Neural)
+	out := make([]float64, l.size)
+	for i := range l.neurons {
+		out[i] = l.neurons[i].out
+	}
 	return out
 }
 
-func (l *Layer) Plus(in []float64) {
-	for i := range l.Neural {
-		l.Neural[i] += in[i]
-	}
-}
-
-func (l *Layer) Divide(denominator float64) {
-	for i := range l.Neural {
-		l.Neural[i] /= denominator
-	}
-}
-
-func (l *Layer) Reset() {
-	for i := range l.Neural {
-		l.Neural[i] = 0
-	}
-}
-
-func (l *Layer) Variance(t []float64) []float64 {
-	result := make([]float64, l.Size)
-	for i := range l.Neural {
-		result[i] = math.Pow(l.Neural[i]-t[i], 2.0)
-	}
-	return result
-}
-
-func (l *Layer) Print(batchIndex, curLayerIndex int) {
-	fmt.Printf("Layer %v: ", curLayerIndex)
-	for i := range l.Neural {
-		if i > 0 {
-			fmt.Printf(", ")
+func (l *Layer) ResetDelta() {
+	for _, n := range l.neurons {
+		for i := 0; i < n.size; i++ {
+			n.delta[i] = 0
 		}
-		fmt.Printf("%v", l.Neural[i])
 	}
-	fmt.Println()
+}
+
+func (l *Layer) AverageDelta(batchSize int) {
+	for _, n := range l.neurons {
+		for i := 0; i < n.size; i++ {
+			n.delta[i] /= float64(batchSize)
+		}
+	}
+}
+
+func (l *Layer) UpdateWeight(learningRate float64) {
+	for k := range l.neurons {
+		n := l.neurons[k]
+		for i := 0; i < n.size; i++ {
+			//fmt.Printf("w[%v][%v]: %f, delta[%v][%v]: %f, after: %f\n", i, k, n.weight[i], i, k, n.delta[i], n.delta[i]*learningRate)
+			n.weight[i] -= n.delta[i] * learningRate
+		}
+	}
+}
+
+func (l *Layer) ErrorDerivative(t []float64) []float64 {
+	ed := make([]float64, len(t))
+	for i := range t {
+		ed[i] = l.neurons[i].ErrorDerivative(t[i])
+	}
+	return ed
+}
+
+func (l *Layer) Error(t []float64) []float64 {
+	err := make([]float64, len(t))
+	for i, n := range l.neurons {
+		err[i] = n.Error(t[i])
+	}
+	return err
+}
+
+func (l *Layer) Forward(in []float64) {
+	l.Input(in)
+	for _, n := range l.neurons {
+		n.CalculateInput()
+		n.Activate()
+	}
+	if l.next != nil {
+		out := l.Output()
+		l.next.Forward(out)
+	}
+}
+
+func (l *Layer) BackPropagation(in []float64, errDerivative []float64) {
+	if l.prev != nil {
+		prev := l.prev
+		prevErrDerivative := make([]float64, prev.size)
+		for i, n := range l.neurons {
+			for j := 0; j < n.size; j++ {
+				n.delta[j] += errDerivative[i] * n.ActivationDerivative() * n.WeightDerivative(j)
+				prevErrDerivative[j] += errDerivative[i] * n.ActivationDerivative() * n.weight[j]
+			}
+		}
+		prev.BackPropagation(in, prevErrDerivative)
+	} else {
+		for i, n := range l.neurons {
+			for j := 0; j < n.size; j++ {
+				n.delta[j] += errDerivative[i] * n.ActivationDerivative() * n.WeightDerivative(j)
+			}
+		}
+	}
 }
