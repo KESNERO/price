@@ -73,7 +73,7 @@ func (l *Layer) UpdateWeight(learningRate float64) {
 
 func (l *Layer) Forward(in []float64) {
 	if len(in) != l.inSize {
-		err := fmt.Errorf("input size didn't match layer defined insize")
+		err := fmt.Errorf("input size %v didn't match layer defined insize %v", len(in), l.inSize)
 		panic(err)
 	}
 	l.Input(in)
@@ -87,7 +87,7 @@ func (l *Layer) Forward(in []float64) {
 
 func (l *Layer) BackPropagation(bias []float64) {
 	if len(bias) != l.outSize {
-		err := fmt.Errorf("err size didn't match layer defined outsize")
+		err := fmt.Errorf("err size %v didn't match layer defined outsize %v", len(bias), l.outSize)
 		panic(err)
 	}
 	nextBias := make([]float64, l.inSize)
