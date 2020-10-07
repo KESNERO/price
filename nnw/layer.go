@@ -1,19 +1,27 @@
 package nnw
 
+import (
+	"fmt"
+)
+
 type Layer struct {
-	size int
+	inSize, outSize, index int
 	neurons []*Neuron
+	fn string
 	prev, next *Layer
 }
 
-func NewLayer(inSize, s int, at string) *Layer {
+func NewLayer(inSize, outSize int, fn string, layerIndex int) *Layer {
 	var l = new(Layer)
-	l.size = s
+	l.inSize = inSize
+	l.outSize = outSize
+	l.index = layerIndex
+	l.fn = fn
 	l.prev = nil
 	l.next = nil
-	l.neurons = make([]*Neuron, l.size)
+	l.neurons = make([]*Neuron, l.outSize)
 	for i := range l.neurons {
-		l.neurons[i] = NewNeuron(inSize, at)
+		l.neurons[i] = NewNeuron(l.inSize)
 	}
 	return l
 }
@@ -24,84 +32,107 @@ func (l *Layer) Input(in []float64) {
 	}
 }
 
+
+func (l *Layer) Calculate() {
+	for _, n := range l.neurons {
+		n.Calculate()
+	}
+}
+
+func (l *Layer) Activate() {
+	for _, n := range l.neurons {
+		n.Activate(l.fn)
+	}
+}
+
 func (l *Layer) Output() []float64 {
-	out := make([]float64, l.size)
+	out := make([]float64, l.outSize)
 	for i := range l.neurons {
-		out[i] = l.neurons[i].out
+		out[i] = l.neurons[i].netOut
 	}
 	return out
 }
 
 func (l *Layer) ResetDelta() {
 	for _, n := range l.neurons {
-		for i := 0; i < n.size; i++ {
-			n.delta[i] = 0
-		}
+		n.ResetDelta()
 	}
 }
 
 func (l *Layer) AverageDelta(batchSize int) {
 	for _, n := range l.neurons {
-		for i := 0; i < n.size; i++ {
-			n.delta[i] /= float64(batchSize)
-		}
+		n.DivideDelta(float64(batchSize))
 	}
 }
 
 func (l *Layer) UpdateWeight(learningRate float64) {
-	for k := range l.neurons {
-		n := l.neurons[k]
-		for i := 0; i < n.size; i++ {
-			//fmt.Printf("w[%v][%v]: %f, delta[%v][%v]: %f, after: %f\n", i, k, n.weight[i], i, k, n.delta[i], n.delta[i]*learningRate)
-			n.weight[i] -= n.delta[i] * learningRate
-		}
+	for _, n := range l.neurons {
+		n.UpdateWeight(learningRate)
 	}
-}
-
-func (l *Layer) ErrorDerivative(t []float64) []float64 {
-	ed := make([]float64, len(t))
-	for i := range t {
-		ed[i] = l.neurons[i].ErrorDerivative(t[i])
-	}
-	return ed
-}
-
-func (l *Layer) Error(t []float64) []float64 {
-	err := make([]float64, len(t))
-	for i, n := range l.neurons {
-		err[i] = n.Error(t[i])
-	}
-	return err
 }
 
 func (l *Layer) Forward(in []float64) {
-	l.Input(in)
-	for _, n := range l.neurons {
-		n.CalculateInput()
-		n.Activate()
+	if len(in) != l.inSize {
+		err := fmt.Errorf("input size didn't match layer defined insize")
+		panic(err)
 	}
+	l.Input(in)
+	l.Calculate()
+	l.Activate()
+	out := l.Output()
 	if l.next != nil {
-		out := l.Output()
 		l.next.Forward(out)
 	}
 }
 
-func (l *Layer) BackPropagation(in []float64, errDerivative []float64) {
-	if l.prev != nil {
-		prev := l.prev
-		prevErrDerivative := make([]float64, prev.size)
-		for i, n := range l.neurons {
-			for j := 0; j < n.size; j++ {
-				n.delta[j] += errDerivative[i] * n.ActivationDerivative() * n.WeightDerivative(j)
-				prevErrDerivative[j] += errDerivative[i] * n.ActivationDerivative() * n.weight[j]
-			}
+func (l *Layer) BackPropagation(bias []float64) {
+	if len(bias) != l.outSize {
+		err := fmt.Errorf("err size didn't match layer defined outsize")
+		panic(err)
+	}
+	nextBias := make([]float64, l.inSize)
+	for j := range nextBias {
+		for i := range l.neurons {
+			nextBias[j] += bias[i] * (l.neurons[i].weight[j] / Sum(l.neurons[i].weight))
 		}
-		prev.BackPropagation(in, prevErrDerivative)
-	} else {
-		for i, n := range l.neurons {
-			for j := 0; j < n.size; j++ {
-				n.delta[j] += errDerivative[i] * n.ActivationDerivative() * n.WeightDerivative(j)
-			}
+		nextBias[j] /= float64(l.outSize)
+	}
+	for i := range l.neurons {
+		l.neurons[i].UpdateDelta(l.fn, bias[i])
+	}
+	if l.prev != nil {
+		l.prev.BackPropagation(nextBias)
+	}
+}
+
+func (l *Layer) PrintOut() {
+	fmt.Printf("layer %v's output:\n", l.index)
+	for i, n := range l.neurons {
+		fmt.Printf("neuron[%v]: %F\n", i, n.netOut)
+	}
+}
+
+func (l *Layer) PrintIn() {
+	fmt.Printf("layer %v's input:\n", l.index)
+	for i, v := range l.neurons[0].in {
+		fmt.Printf("in[%v]: %F\n", i, v)
+	}
+}
+
+func (l *Layer) PrintWeight() {
+	fmt.Printf("layer %v's weight:\n", l.index)
+	for i, n := range l.neurons {
+		for j := range n.weight {
+			fmt.Printf("weight[%v][%v]: %F\n", j, i, n.weight[j])
+		}
+	}
+}
+
+func (l *Layer) PrintDelta() {
+	fmt.Printf("layer %v's delta:\n", l.index)
+	for i, n := range l.neurons {
+		for j := range n.delta {
+			fmt.Printf("delta[%v][%v]: %F\n", j, i, n.delta[j])
 		}
 	}
 }

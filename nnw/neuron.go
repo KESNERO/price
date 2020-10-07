@@ -1,41 +1,20 @@
 package nnw
 
-import (
-	"math"
-	"math/rand"
-)
-
-func Gauss() float64 {
-	μ := 0.0
-	σ := 0.25
-	x := rand.Float64()
-	w := 1 / (math.Sqrt(2*math.Pi) * σ) * math.Pow(math.E, -math.Pow(x-μ, 2)/(2*math.Pow(σ, 2)))
-	return w
-}
-
-func Random() float64 {
-	w := rand.Float64()
-	return w
-}
-
 type Neuron struct {
-	out float64
-	size int
-	in []float64
-	weight []float64
-	delta []float64
-	activeType string
+	inSize int
+	in, weight, delta, out []float64
+	outTotal, netOut float64
 }
 
-func NewNeuron(inSize int, at string) *Neuron {
+func NewNeuron(inSize int) *Neuron {
 	n := new(Neuron)
-	n.size = inSize
-	n.in = make([]float64, inSize)
-	n.weight = make([]float64, inSize)
-	n.delta = make([]float64, inSize)
-	n.activeType = at
+	n.inSize = inSize
+	n.in = make([]float64, n.inSize)
+	n.weight = make([]float64, n.inSize)
+	n.delta = make([]float64, n.inSize)
+	n.out = make([]float64, n.inSize)
 	for i := range n.weight {
-		n.weight[i] = Gauss()
+		n.weight[i] = Random()
 	}
 	return n
 }
@@ -44,47 +23,67 @@ func (n *Neuron) SetInput(in []float64) {
 	copy(n.in, in)
 }
 
-func (n *Neuron) CalculateInput() {
-	for _, in := range n.in {
-		n.out += in
+func (n *Neuron) Calculate() {
+	n.outTotal = 0.0
+	for i := range n.in {
+		n.out[i] += n.in[i] * n.weight[i]
+		n.outTotal += n.out[i]
 	}
 }
 
-func (n *Neuron) Activate() {
-	switch n.activeType {
+func (n *Neuron) Activate(fn string) {
+	switch fn {
 	case "Sigmoid":
-		x := n.out
-		y := 1 / (1+math.Pow(math.E, -x))
-		n.out = y
+		n.netOut = Sigmoid(n.outTotal)
 	case "LeRU":
-		x := n.out
-		y := math.Max(0.0, x)
-		n.out = y
+		n.netOut = LeRU(n.outTotal)
+	case "Normal":
+		n.netOut = n.outTotal
 	}
 }
 
-// d(error)/d(output)
-func (n *Neuron) ErrorDerivative(t float64) float64 {
-	return n.out - t
+func (n *Neuron) ResetDelta() {
+	for i := range n.delta {
+		n.delta[i] = 0.0
+	}
 }
 
-// d(output)/d(input)
-func (n *Neuron) ActivationDerivative() float64 {
-	switch n.activeType {
+func (n *Neuron) DivideDelta(denominator float64) {
+	for i := range n.delta {
+		n.delta[i] /= denominator
+	}
+}
+
+func (n *Neuron) BiasBack(fn string, bias float64) float64 {
+	switch fn {
 	case "Sigmoid":
-		return n.out * (1 - n.out)
+		return DeSigmoid(bias)
 	case "LeRU":
-		return 1.0
+		return DeLeRU(bias)
 	default:
-		return 1.0
+		return bias
 	}
 }
 
-// d(input)/d(w)
-func (n *Neuron) WeightDerivative(i int) float64 {
-	return n.in[i]
+func (n *Neuron) UpdateDelta(fn string, bias float64) {
+	switch fn {
+	case "Sigmoid":
+		for i := range n.delta {
+			n.delta[i] += bias * SigmoidDerivative(n.netOut) * n.in[i]
+		}
+	case "LeRU":
+		for i := range n.delta {
+			n.delta[i] += bias * LeRUDerivative(n.netOut) * n.in[i]
+		}
+	case "Normal":
+		for i := range n.delta {
+			n.delta[i] += bias * n.in[i]
+		}
+	}
 }
 
-func (n *Neuron) Error(t float64) float64 {
-	return math.Pow(t-n.out, 2.0) / 2
+func (n *Neuron) UpdateWeight(learningRate float64) {
+	for i := range n.weight {
+		n.weight[i] -= learningRate * n.delta[i]
+	}
 }

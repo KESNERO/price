@@ -77,26 +77,25 @@ func Compare(out, expected [][]float64, print bool) {
 
 func main() {
 	bs := 1
-	step := 100000
+	step := 1
 	inSize := 4
 	outSize := 2
-	learningRate := 0.0001
-	printResult := true
-	at := "LeRU"
+	learningRate := 0.001
+	fn := "LeRU"
 	allData := LoadData("data.csv")
 	trainSize := len(allData)/2
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(allData), func(i, j int) {
 		allData[i], allData[j] = allData[j], allData[i]
 	})
-	network := nnw.NewNetwork(inSize, []int{4, outSize}, bs, learningRate, at)
+	network := nnw.NewNetwork(inSize, outSize, []int{4, 2}, bs, learningRate, fn)
 	trainData := allData[0:trainSize]
-	testData := allData[trainSize:]
 	in, expected := PreprocessData(trainData)
 	network.Train(in, expected, step)
 	out := network.Predict(in)
-	Compare(out, expected, printResult)
-	in, expected = PreprocessData(testData)
-	out = network.Predict(in)
-	Compare(out, expected, printResult)
+	Compare(out, expected, false)
+	//testData := allData[trainSize:]
+	//in, expected = PreprocessData(testData)
+	//out = network.Predict(in)
+	//Compare(out, expected, printResult)
 }
