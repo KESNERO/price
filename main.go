@@ -11,11 +11,6 @@ import (
 	"time"
 )
 
-func Sigmoid(x float64) float64 {
-	y := 1 / (1+math.Pow(math.E, -x))
-	return y
-}
-
 func LoadData(filename string) [][]float64 {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -61,26 +56,34 @@ func PreprocessData(data [][]float64) (in, out [][]float64) {
 
 func PreprocessOutput(data [][]float64) {
 	for _, row := range data {
-		row[0] = Sigmoid(row[0])
-		row[1] = Sigmoid(row[1])
+		row[0] = nnw.LeRU(row[0])
+		row[1] = nnw.LeRU(row[1])
 	}
 }
 
 func Compare(out, expected [][]float64, print bool) {
 	if print {
+		totalError := make([]float64, 2)
 		for i := range out {
-			fmt.Printf("low predict: %f, actual: %f\n", out[i][0]*50000.0, expected[i][0]*50000.0)
+			totalError[0] += math.Pow(out[i][0]*50000.0 - expected[i][0]*50000.0, 2.0) / 2
+			fmt.Printf("low predict: %f, actual: %f\n", out[i][0]*50000.0, expected[i][1]*50000.0)
+			totalError[1] += math.Pow(out[i][1]*50000.0 - expected[i][1]*50000.0, 2.0) / 2
 			fmt.Printf("ave predict: %f, actual: %f\n", out[i][1]*50000.0, expected[i][1]*50000.0)
 		}
+		totalError[0] /= float64(len(expected))
+		totalError[1] /= float64(len(expected))
+		totalError[0] = math.Sqrt(totalError[0])
+		totalError[1] = math.Sqrt(totalError[1])
+		fmt.Printf("low price variance: %f; average price variance: %f\n", totalError[0], totalError[1])
 	}
 }
 
 func main() {
-	bs := 1
-	step := 1
+	bs := 10
+	step := 1000000
 	inSize := 4
 	outSize := 2
-	learningRate := 0.001
+	learningRate := 0.0001
 	fn := "LeRU"
 	allData := LoadData("data.csv")
 	trainSize := len(allData)/2
@@ -88,14 +91,14 @@ func main() {
 	rand.Shuffle(len(allData), func(i, j int) {
 		allData[i], allData[j] = allData[j], allData[i]
 	})
-	network := nnw.NewNetwork(inSize, outSize, []int{4, 2}, bs, learningRate, fn)
+	network := nnw.NewNetwork(inSize, outSize, []int{4, 8, 2}, bs, learningRate, fn)
 	trainData := allData[0:trainSize]
 	in, expected := PreprocessData(trainData)
 	network.Train(in, expected, step)
 	out := network.Predict(in)
-	Compare(out, expected, false)
-	//testData := allData[trainSize:]
-	//in, expected = PreprocessData(testData)
-	//out = network.Predict(in)
-	//Compare(out, expected, printResult)
+	Compare(out, expected, true)
+	testData := allData[trainSize:]
+	in, expected = PreprocessData(testData)
+	out = network.Predict(in)
+	Compare(out, expected, true)
 }

@@ -1,7 +1,5 @@
 package nnw
 
-import "fmt"
-
 type Network struct {
 	BatchSize     int
 	InSize, OutSize int
@@ -67,6 +65,5 @@ func (network *Network) Predict(in [][]float64) [][]float64 {
 		network.InputLayer.Forward(in[i])
 		out = append(out, network.OutputLayer.Output())
 	}
-	fmt.Println(out)
 	return out
 }

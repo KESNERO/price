@@ -26,7 +26,7 @@ func (n *Neuron) SetInput(in []float64) {
 func (n *Neuron) Calculate() {
 	n.outTotal = 0.0
 	for i := range n.in {
-		n.out[i] += n.in[i] * n.weight[i]
+		n.out[i] = n.in[i] * n.weight[i]
 		n.outTotal += n.out[i]
 	}
 }
