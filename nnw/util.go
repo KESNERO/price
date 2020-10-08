@@ -6,10 +6,8 @@ import (
 )
 
 func Gauss() float64 {
-	μ := 0.0
-	σ := 0.25
-	x := rand.Float64()
-	w := 1 / (math.Sqrt(2*math.Pi) * σ) * math.Pow(math.E, -math.Pow(x-μ, 2)/(2*math.Pow(σ, 2)))
+	x := float64(rand.Int())
+	w := math.Pow(math.E, - x * x)
 	return w
 }
 

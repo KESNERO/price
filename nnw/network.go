@@ -1,5 +1,7 @@
 package nnw
 
+import "fmt"
+
 type Network struct {
 	BatchSize     int
 	InSize, OutSize int
@@ -32,6 +34,7 @@ func NewNetwork(inSize, outSize int, layerDefine []int, bs int, lr float64, fn s
 }
 
 func (network *Network) Train(trainInput, expected [][]float64, step int) {
+	fmt.Println("Start train")
 	for t := 0; t < step; t++ {
 		for _, l := range network.Layers {
 			l.ResetDelta()
@@ -57,6 +60,7 @@ func (network *Network) Train(trainInput, expected [][]float64, step int) {
 			}
 		}
 	}
+	fmt.Println("Finish train")
 }
 
 func (network *Network) Predict(in [][]float64) [][]float64 {
