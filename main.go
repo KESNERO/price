@@ -7,12 +7,10 @@ import (
 	"github.com/KESNERO/price/nnw"
 	"io"
 	"math"
-	"math/rand"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func Run(c *exec.Cmd) string {
@@ -137,12 +135,12 @@ func PreprocessData2(data [][]float64) (date [][]string, in, out [][]float64) {
 		in[i][2] = row[2] / row[3]
 		in[i][3] = row[4] / 50000
 		in[i][4] = row[5] / 50000
-		out[i][0], out[i][1] = row[6] / 50000, (row[7]-row[6]) / 50000
+		out[i][0], out[i][1] = row[7] / 50000, (row[7]-row[6]) / 50000
 	}
 	return
 }
 
-func Combind(in, preOut [][]float64) [][]float64 {
+func Combine(in, preOut [][]float64) [][]float64 {
     result := make([][]float64, len(in))
     for i := range in {
         result[i] = make([]float64, 7)
@@ -171,19 +169,19 @@ func Variance(date [][]string, out, expected [][]float64) {
 		v[0] += math.Pow(expected[i][0]-out[i][0], 2)
 		v[1] += math.Pow(expected[i][1]-out[i][1], 2)
 	}
-	fmt.Printf("average standard deviation: %f, bias standard deviation: %f\n", math.Sqrt(v[0])/float64(size), math.Sqrt(v[1])/float64(size))
+	fmt.Printf("average standard deviation: %f, bias standard deviation: %f\n", math.Sqrt(v[0]/float64(size)), math.Sqrt(v[1]/float64(size)))
 }
 
 func main() {
 	allData := LoadData("data.csv")
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(allData), func(i, j int) {
-		allData[i], allData[j] = allData[j], allData[i]
-	})
+	//rand.Seed(time.Now().UnixNano())
+	//rand.Shuffle(len(allData), func(i, j int) {
+	//	allData[i], allData[j] = allData[j], allData[i]
+	//})
 	trainSize := len(allData)
 
 	// Four key point parameters
-	bs := 1
+	bs := 10
 	step := 1000000
 	learningRate := 0.0001
 	fn := "LeRU"
@@ -197,30 +195,33 @@ func main() {
 
 	_, in2, expected2 := PreprocessData2(trainData)
 	layerDefine2 := []int{len(in2[0]), 12, len(expected2[0])}
-	in3 := Combind(in2, expected1)
+	in3 := Combine(in2, expected1)
 
 	network2 := nnw.NewNetwork(len(in3[0]), len(expected2[0]), layerDefine2, bs, learningRate, fn)
 	network2.Train(in3, expected2, step)
 
 	testData := allData[:]
-	date2, in4, _ := PreprocessData1(testData)
+	date2, in4, expected4 := PreprocessData1(testData)
 	_, _, expected3 := PreprocessData2(testData)
 	out1 := network1.Predict(in4)
-	in5 := Combind(in4, out1)
+	in5 := Combine(in4, out1)
+	out1 = RecoverOutput(out1)
+	expected4 = RecoverOutput(expected4)
+	Variance(date2, out1, expected4)
 	out2 := network2.Predict(in5)
 	out2 = RecoverOutput(out2)
 	expected3 = RecoverOutput(expected3)
 	Variance(date2, out2, expected3)
-	network1.Layers[0].PrintWeight()
-	network2.Layers[0].PrintWeight()
 
+	fmt.Println(testData[0])
 	myData := [][]float64{
-		[]float64{2020.0, 10.0, 10000.0, 30000.0, 18000, 19000, 20000, 25000},  // 导入10月份数据
+		[]float64{2020, 8, 10649, 25292, 17575, 19059, 25800, 30005, 0, 0},  // 导入10月份数据
 	}
 	_, in6, _ := PreprocessData1(myData)
 	out3 := network1.Predict(in6)
-	in7 := Combind(in6, out3)
-	out4 := network2.Predict(in7)
+	_, in7, _ := PreprocessData2(myData)
+	in8 := Combine(in7, out3)
+	out4 := network2.Predict(in8)
 	out4 = RecoverOutput(out4)
-	fmt.Printf("My predict: ave-%f, low-%f\n", out4[0][0], out4[0][0]-out4[0][1])
+	fmt.Printf("My predict: ave-%f, bias-%f, low-%f\n", out4[0][0], out4[0][1], out4[0][0]-out4[0][1])
 }
